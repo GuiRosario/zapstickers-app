@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Upload, Image as ImageIcon, RotateCcw, Move, Smartphone } from 'lucide-react';
+import { Upload, Image as ImageIcon, RotateCcw, Move, Smartphone, Download, AlertCircle } from 'lucide-react';
 
 const StickerApp = () => {
   const [step, setStep] = useState('upload'); // upload, edit, result
@@ -34,6 +34,21 @@ const StickerApp = () => {
     }
   };
 
+  // Função auxiliar para desenhar retângulo arredondado (compatível com todos navegadores)
+  const drawRoundedRect = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) => {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+  };
+
   // Função Principal de Desenho
   const drawCanvas = () => {
     const canvas = canvasRef.current;
@@ -41,26 +56,24 @@ const StickerApp = () => {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Limpar
+    // Limpar tudo (Garante transparência total)
     ctx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
 
-    // Salvar estado para aplicar a máscara
     ctx.save();
 
     // 1. Criar a Máscara (Formato da Figurinha)
-    ctx.beginPath();
     const center = CANVAS_SIZE / 2;
-    
-    // Agora usamos o tamanho TOTAL, sem descontar borda
     const radius = CANVAS_SIZE / 2; 
 
     if (shape === 'circle') {
+      ctx.beginPath();
       ctx.arc(center, center, radius, 0, Math.PI * 2);
+      ctx.clip();
     } else {
-      // Quadrado com cantos levemente arredondados
-      ctx.roundRect(0, 0, CANVAS_SIZE, CANVAS_SIZE, 40);
+      // Quadrado com cantos arredondados (sem borda branca extra)
+      drawRoundedRect(ctx, 0, 0, CANVAS_SIZE, CANVAS_SIZE, 40);
+      ctx.clip();
     }
-    ctx.clip();
 
     // 2. Desenhar a Imagem do Usuário
     const imgWidth = image.width * scale;
@@ -70,7 +83,6 @@ const StickerApp = () => {
     
     ctx.drawImage(image, x, y, imgWidth, imgHeight);
 
-    // Remover a máscara
     ctx.restore();
   };
 
@@ -80,7 +92,7 @@ const StickerApp = () => {
     }
   }, [image, scale, position, shape, step]);
 
-  // Controles de Mouse/Touch para mover a imagem
+  // Controles de Mouse/Touch
   const handlePointerDown = (e: any) => {
     setIsDragging(true);
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
@@ -90,7 +102,7 @@ const StickerApp = () => {
 
   const handlePointerMove = (e: any) => {
     if (!isDragging) return;
-    e.preventDefault(); // Evita scroll no mobile
+    e.preventDefault();
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
     const clientY = e.touches ? e.touches[0].clientY : e.clientY;
     setPosition({
@@ -106,9 +118,19 @@ const StickerApp = () => {
   const generateSticker = async () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const url = canvas.toDataURL('image/webp', 0.8);
+    const url = canvas.toDataURL('image/webp', 0.85); // Qualidade alta
     setFinalUrl(url);
     setStep('result');
+  };
+
+  const handleDownload = () => {
+    if (!finalUrl) return;
+    const link = document.createElement('a');
+    link.href = finalUrl;
+    link.download = 'figurinha_sem_borda.webp'; // Nome sugestivo
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const handleShare = async () => {
@@ -117,27 +139,19 @@ const StickerApp = () => {
     try {
       const response = await fetch(finalUrl);
       const blob = await response.blob();
-      const file = new File([blob], 'figurinha_zap.webp', { type: 'image/webp' });
+      const file = new File([blob], 'sticker.webp', { type: 'image/webp' });
 
       // @ts-ignore
       if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({
           files: [file],
-          title: 'Minha Figurinha',
-          text: 'Olha a figurinha que eu fiz!'
         });
       } else {
-        const link = document.createElement('a');
-        link.href = finalUrl;
-        link.download = 'figurinha_zap.webp';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        alert('Seu navegador não suporta envio direto. A imagem foi baixada! Agora é só arrastar pro WhatsApp Web.');
+        handleDownload();
       }
     } catch (error) {
       console.error('Erro ao compartilhar:', error);
-      alert('Erro ao compartilhar. Tente baixar a imagem.');
+      handleDownload();
     }
   };
 
@@ -148,9 +162,9 @@ const StickerApp = () => {
         <div className="absolute top-0 left-0 w-full h-full opacity-10 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"></div>
         <h1 className="text-2xl font-bold flex items-center justify-center gap-2 relative z-10">
           <ImageIcon className="w-8 h-8" />
-          ZapSticker Lite
+          ZapSticker Limpo
         </h1>
-        <p className="text-green-100 text-sm relative z-10">Conversor Rápido de Figurinhas</p>
+        <p className="text-green-100 text-xs relative z-10 uppercase tracking-widest opacity-80">Zero Borda Branca</p>
       </header>
 
       <main className="max-w-md mx-auto p-4">
@@ -159,11 +173,11 @@ const StickerApp = () => {
         {step === 'upload' && (
           <div className="flex flex-col items-center justify-center h-[60vh] gap-6 animate-fade-in">
             <div className="text-center space-y-2">
-              <h2 className="text-xl font-semibold">Escolha uma foto</h2>
-              <p className="text-gray-400 text-sm">JPG ou PNG vira figurinha na hora.</p>
+              <h2 className="text-xl font-semibold">Foto sem borda</h2>
+              <p className="text-gray-400 text-sm">Carregue sua foto para começar.</p>
             </div>
             
-            <label className="w-full h-64 border-4 border-dashed border-gray-700 rounded-3xl flex flex-col items-center justify-center cursor-pointer hover:border-green-500 hover:bg-gray-800 transition-all group">
+            <label className="w-full h-64 border-4 border-dashed border-gray-700 rounded-3xl flex flex-col items-center justify-center cursor-pointer hover:border-green-500 hover:bg-gray-800 transition-all group active:scale-95">
               <div className="bg-green-600/20 p-6 rounded-full mb-4 group-hover:scale-110 transition-transform">
                 <Upload className="w-10 h-10 text-green-500" />
               </div>
@@ -188,7 +202,7 @@ const StickerApp = () => {
               
               {/* Canvas Container */}
               <div 
-                className="relative w-full aspect-square bg-[url('https://www.transparenttextures.com/patterns/checkerboard.png')] rounded-lg overflow-hidden border-2 border-gray-600 touch-none cursor-move"
+                className="relative w-full aspect-square bg-[url('https://www.transparenttextures.com/patterns/checkerboard.png')] rounded-lg overflow-hidden border-2 border-gray-600 touch-none cursor-move shadow-inner"
                 onMouseDown={handlePointerDown}
                 onMouseMove={handlePointerMove}
                 onMouseUp={handlePointerUp}
@@ -204,14 +218,12 @@ const StickerApp = () => {
                   className="w-full h-full object-contain"
                 />
                 <div className="absolute bottom-2 right-2 bg-black/50 text-white text-[10px] px-2 py-1 rounded pointer-events-none">
-                  Arraste para mover
+                  Mova e Zoom
                 </div>
               </div>
 
               {/* Controls */}
               <div className="mt-4 space-y-4">
-                
-                {/* Zoom */}
                 <div className="space-y-1">
                   <label className="text-xs text-gray-400 flex justify-between">
                     <span>Zoom</span>
@@ -228,17 +240,16 @@ const StickerApp = () => {
                   />
                 </div>
 
-                {/* Shape Toggle */}
                 <div className="flex gap-2">
                   <button 
                     onClick={() => setShape('circle')}
-                    className={`flex-1 py-2 text-xs font-bold rounded-lg border ${shape === 'circle' ? 'bg-green-600 border-green-500 text-white' : 'bg-gray-700 border-gray-600 text-gray-300'}`}
+                    className={`flex-1 py-2 text-xs font-bold rounded-lg border transition-all ${shape === 'circle' ? 'bg-green-600 border-green-500 text-white shadow-lg shadow-green-900/50' : 'bg-gray-700 border-gray-600 text-gray-300'}`}
                   >
                     Circular
                   </button>
                   <button 
                     onClick={() => setShape('square')}
-                    className={`flex-1 py-2 text-xs font-bold rounded-lg border ${shape === 'square' ? 'bg-green-600 border-green-500 text-white' : 'bg-gray-700 border-gray-600 text-gray-300'}`}
+                    className={`flex-1 py-2 text-xs font-bold rounded-lg border transition-all ${shape === 'square' ? 'bg-green-600 border-green-500 text-white shadow-lg shadow-green-900/50' : 'bg-gray-700 border-gray-600 text-gray-300'}`}
                   >
                     Quadrado
                   </button>
@@ -250,7 +261,7 @@ const StickerApp = () => {
               onClick={generateSticker}
               className="w-full py-4 bg-green-500 hover:bg-green-400 text-black font-bold rounded-xl shadow-lg shadow-green-900/50 transform transition active:scale-95 flex items-center justify-center gap-2"
             >
-              Criar Figurinha <RotateCcw className="w-5 h-5 rotate-90" />
+              Gerar Figurinha <RotateCcw className="w-5 h-5 rotate-90" />
             </button>
           </div>
         )}
@@ -260,33 +271,63 @@ const StickerApp = () => {
           <div className="flex flex-col items-center gap-6 animate-fade-in">
             <div className="text-center">
               <h2 className="text-2xl font-bold text-white mb-1">Prontinho!</h2>
-              <p className="text-gray-400 text-sm">Sua figurinha foi gerada.</p>
+              <p className="text-gray-400 text-sm">Sem borda e fundo transparente.</p>
             </div>
 
-            <div className="relative group">
-              <div className="absolute inset-0 bg-green-500 blur-xl opacity-20 rounded-full group-hover:opacity-40 transition-opacity"></div>
-              <img src={finalUrl} alt="Sticker Final" className="w-64 h-64 object-contain relative z-10 drop-shadow-2xl" />
+            <div className="relative group w-64 h-64">
+              {/* Checkerboard background para provar transparência */}
+              <div className="absolute inset-0 bg-white/10 bg-[url('https://www.transparenttextures.com/patterns/checkerboard.png')] opacity-50 rounded-xl border border-white/20"></div>
+              <img src={finalUrl} alt="Sticker Final" className="w-full h-full object-contain relative z-10 drop-shadow-2xl" />
+              <div className="absolute -bottom-6 w-full text-center text-[10px] text-gray-500">
+                O fundo xadrez mostra a transparência
+              </div>
             </div>
 
-            <div className="w-full space-y-3">
-              <button 
-                onClick={handleShare}
-                className="w-full py-4 bg-[#25D366] hover:bg-[#20bd5a] text-white font-bold rounded-xl shadow-lg flex items-center justify-center gap-2 transform transition active:scale-95"
-              >
-                <Smartphone className="w-5 h-5" />
-                Mandar pro Zap
-              </button>
-              
-              <p className="text-xs text-center text-gray-500 px-4">
-                No iPhone/Android, clique acima para abrir o WhatsApp. <br/>
-                No PC, a imagem será baixada.
-              </p>
+            <div className="w-full space-y-3 mt-4">
+              <div className="grid grid-cols-2 gap-3">
+                <button 
+                  onClick={handleShare}
+                  className="col-span-2 sm:col-span-1 py-4 bg-[#25D366] hover:bg-[#20bd5a] text-white font-bold rounded-xl shadow-lg flex items-center justify-center gap-2 transform transition active:scale-95"
+                >
+                  <Smartphone className="w-5 h-5" />
+                  Mandar
+                </button>
+                
+                <button 
+                  onClick={handleDownload}
+                  className="col-span-2 sm:col-span-1 py-4 bg-gray-700 hover:bg-gray-600 text-white font-bold rounded-xl shadow-lg flex items-center justify-center gap-2 transform transition active:scale-95"
+                >
+                  <Download className="w-5 h-5" />
+                  Baixar
+                </button>
+              </div>
+
+              {/* DICA DE OURO PARA EVITAR A BORDA DO ZAP */}
+              <div className="bg-green-900/30 border border-green-800 p-4 rounded-xl text-sm text-green-100 flex gap-3 text-left">
+                <AlertCircle className="w-10 h-10 text-green-400 shrink-0" />
+                <div>
+                  <p className="font-bold mb-1">Para garantir ZERO borda:</p>
+                  <p className="text-gray-300 text-xs leading-relaxed">
+                    O WhatsApp às vezes coloca borda branca sozinho se você enviar como foto.
+                    <br/><br/>
+                    Se isso acontecer:
+                    <br/>
+                    1. Clique em <b>Baixar</b>.
+                    <br/>
+                    2. No WhatsApp, escolha enviar <b>Documento</b>.
+                    <br/>
+                    3. Selecione o arquivo baixado.
+                    <br/>
+                    <span className="text-green-300 font-bold">Ele vira figurinha perfeita na hora!</span>
+                  </p>
+                </div>
+              </div>
 
               <button 
                 onClick={() => setStep('edit')}
                 className="w-full py-3 bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold rounded-xl border border-gray-700 transition"
               >
-                Editar novamente
+                Ajustar
               </button>
 
                <button 
@@ -297,7 +338,7 @@ const StickerApp = () => {
                 }}
                 className="w-full py-2 text-sm text-gray-500 hover:text-white transition"
               >
-                Criar outra
+                Nova Foto
               </button>
             </div>
           </div>
